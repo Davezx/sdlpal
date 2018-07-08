@@ -1,7 +1,7 @@
 /* -*- mode: c; tab-width: 4; c-basic-offset: 4; c-file-style: "linux" -*- */
 //
 // Copyright (c) 2009-2011, Wei Mingzhi <whistler_wmz@users.sf.net>.
-// Copyright (c) 2011-2017, SDLPAL development team.
+// Copyright (c) 2011-2018, SDLPAL development team.
 // All rights reserved.
 //
 // This file is part of SDLPAL.
@@ -33,15 +33,24 @@ static SDL_Palette       *gpPalette          = NULL;
 
 #if SDL_VERSION_ATLEAST(2,0,0)
 SDL_Window               *gpWindow           = NULL;
-static SDL_Renderer      *gpRenderer         = NULL;
-static SDL_Texture       *gpTexture          = NULL;
-static SDL_Texture       *gpTouchOverlay     = NULL;
-static SDL_Rect           gOverlayRect;
-static SDL_Rect           gTextureRect;
+SDL_Renderer      *gpRenderer         = NULL;
+SDL_Texture       *gpTexture          = NULL;
+SDL_Texture       *gpTouchOverlay     = NULL;
+SDL_Rect           gOverlayRect;
+SDL_Rect           gTextureRect;
+
+static struct RenderBackend {
+    void (*Init)();
+    void (*Setup)();
+    SDL_Texture *(*CreateTexture)(int width, int height);
+    void (*RenderCopy)();
+} gRenderBackend;
+#else
+#undef PAL_HAS_GLSL
 #endif
 
 // The real screen surface
-static SDL_Surface       *gpScreenReal       = NULL;
+SDL_Surface       *gpScreenReal       = NULL;
 
 volatile BOOL g_bRenderPaused = FALSE;
 
@@ -51,6 +60,10 @@ static BOOL bScaleScreen = PAL_SCALE_SCREEN;
 static WORD               g_wShakeTime       = 0;
 static WORD               g_wShakeLevel      = 0;
 
+#if PAL_HAS_GLSL
+#include "video_glsl.h"
+#endif
+
 #ifdef __vita__
 #include "psp2_shader.h"
 #include <vita2d.h>
@@ -58,12 +71,23 @@ vita2d_shader *shader = NULL;
 #endif
 
 #if SDL_VERSION_ATLEAST(2, 0, 0)
+void VIDEO_SetupTouchArea(int window_w, int window_h, int draw_w, int draw_h)
+{
+	gOverlayRect.x = (window_w - draw_w) / 2;
+	gOverlayRect.y = (window_h - draw_h) / 2;
+	gOverlayRect.w = draw_w;
+	gOverlayRect.h = draw_h;
+#if PAL_HAS_TOUCH
+	PAL_SetTouchBounds(window_w, window_h, gOverlayRect);
+#endif
+}
+
 #define SDL_SoftStretch SDL_UpperBlit
 static SDL_Texture *VIDEO_CreateTexture(int width, int height)
 {
 	int texture_width, texture_height;
-	float ratio = (float)width / (float)height;
-	ratio *= 1.6f * (float)gConfig.dwAspectY / (float)gConfig.dwAspectX;
+	double ratio = (double)width / (double)height;
+	ratio *= 1.6f * (double)gConfig.dwTextureHeight / (float)gConfig.dwTextureWidth;
 	//
 	// Check whether to keep the aspect ratio
 	//
@@ -84,26 +108,20 @@ static SDL_Texture *VIDEO_CreateTexture(int width, int height)
 
 		WORD w = (WORD)(ratio * 320.0f) & ~0x3;
 		WORD h = (WORD)(ratio * 200.0f) & ~0x3;
-		gOverlayRect.x = (width - w) / 2;
-		gOverlayRect.y = (height - h) / 2;
-		gOverlayRect.w = w;
-		gOverlayRect.h = h;
 		gTextureRect.x = (texture_width - 320) / 2;
 		gTextureRect.y = (texture_height - 200) / 2;
 		gTextureRect.w = 320; gTextureRect.h = 200;
-#if PAL_HAS_TOUCH
-		PAL_SetTouchBounds(width, height, gOverlayRect);
-#endif
+		
+		VIDEO_SetupTouchArea(width,height,w,h);
 	}
 	else
 	{
 		texture_width = 320;
 		texture_height = 200;
-		gOverlayRect.x = gOverlayRect.y = 0;
-		gOverlayRect.w = width;
-		gOverlayRect.h = height;
 		gTextureRect.x = gTextureRect.y = 0;
 		gTextureRect.w = 320; gTextureRect.h = 200;
+		
+		VIDEO_SetupTouchArea(width,height,width,height);
 	}
 
 	//
@@ -116,6 +134,8 @@ static SDL_Texture *VIDEO_CreateTexture(int width, int height)
 #endif
 }
 #endif
+
+void NullFunc() {}
 
 INT
 VIDEO_Startup(
@@ -140,12 +160,28 @@ VIDEO_Startup(
 #if SDL_VERSION_ATLEAST(2,0,0)
    int render_w, render_h;
 
+   gRenderBackend.Init = NullFunc;
+   gRenderBackend.Setup = NullFunc;
+   gRenderBackend.CreateTexture = VIDEO_CreateTexture;
+   gRenderBackend.RenderCopy = VIDEO_RenderCopy;
+
+#if PAL_HAS_GLSL
+   if( gConfig.fEnableGLSL) {
+	   gRenderBackend.Init = VIDEO_GLSL_Init;
+	   gRenderBackend.Setup = VIDEO_GLSL_Setup;
+	   gRenderBackend.CreateTexture = VIDEO_GLSL_CreateTexture;
+	   gRenderBackend.RenderCopy = VIDEO_GLSL_RenderCopy;
+   }
+#endif
+	
+   gRenderBackend.Init();
+
    //
    // Before we can render anything, we need a window and a renderer.
    //
+   if (gpWindow == NULL)
    gpWindow = SDL_CreateWindow("Pal", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                               gConfig.dwScreenWidth, gConfig.dwScreenHeight, PAL_VIDEO_INIT_FLAGS | (gConfig.fFullScreen ? SDL_WINDOW_BORDERLESS : 0) );
-   SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, gConfig.pszScaleQuality);
+                               gConfig.dwScreenWidth, gConfig.dwScreenHeight, PAL_VIDEO_INIT_FLAGS | (gConfig.fFullScreen ? SDL_WINDOW_BORDERLESS : 0));
 
    if (gpWindow == NULL)
    {
@@ -153,6 +189,8 @@ VIDEO_Startup(
    }
 
    gpRenderer = SDL_CreateRenderer(gpWindow, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+
+   gRenderBackend.Setup();
 
    if (gpRenderer == NULL)
    {
@@ -186,7 +224,7 @@ VIDEO_Startup(
    // Create texture for screen.
    //
    SDL_GetRendererOutputSize(gpRenderer, &render_w, &render_h);
-   gpTexture = VIDEO_CreateTexture(render_w, render_h);
+   gpTexture = gRenderBackend.CreateTexture(render_w, render_h);
 
    //
    // Create palette object
@@ -214,7 +252,9 @@ VIDEO_Startup(
       if (overlay != NULL)
       {
          SDL_SetColorKey(overlay, SDL_RLEACCEL, SDL_MapRGB(overlay->format, 255, 0, 255));
+         SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, gConfig.pszScaleQuality);
          gpTouchOverlay = SDL_CreateTextureFromSurface(gpRenderer, overlay);
+         SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
          SDL_SetTextureAlphaMod(gpTouchOverlay, 120);
          SDL_FreeSurface(overlay);
       }
@@ -351,7 +391,6 @@ VIDEO_Shutdown(
 }
 
 #if SDL_VERSION_ATLEAST(2,0,0)
-PAL_FORCE_INLINE
 VOID
 VIDEO_RenderCopy(
    VOID
@@ -520,7 +559,7 @@ VIDEO_UpdateScreen(
    }
 
 #if SDL_VERSION_ATLEAST(2,0,0)
-   VIDEO_RenderCopy();
+   gRenderBackend.RenderCopy();
 #else
    SDL_UpdateRect(gpScreenReal, dstrect.x, dstrect.y, dstrect.w, dstrect.h);
 #endif
@@ -620,7 +659,7 @@ VIDEO_Resize(
       SDL_DestroyTexture(gpTexture);
    }
 
-   gpTexture = VIDEO_CreateTexture(w, h);
+   gpTexture = gRenderBackend.CreateTexture(w, h);
 
    if (gpTexture == NULL)
    {
@@ -1001,7 +1040,7 @@ VIDEO_SwitchScreen(
 
       SDL_SoftStretch(gpScreenBak, NULL, gpScreenReal, &dstrect);
 #if SDL_VERSION_ATLEAST(2, 0, 0)
-      VIDEO_RenderCopy();
+      gRenderBackend.RenderCopy();
 #else
       SDL_UpdateRect(gpScreenReal, 0, 0, gpScreenReal->w, gpScreenReal->h);
 #endif
@@ -1144,7 +1183,7 @@ VIDEO_FadeScreen(
 
             SDL_FillRect(gpScreenReal, &dstrect, 0);
 #if SDL_VERSION_ATLEAST(2, 0, 0)
-            VIDEO_RenderCopy();
+            gRenderBackend.RenderCopy();
 #else
 			SDL_UpdateRect(gpScreenReal, 0, 0, gpScreenReal->w, gpScreenReal->h);
 #endif
@@ -1159,7 +1198,7 @@ VIDEO_FadeScreen(
 
             SDL_SoftStretch(gpScreenBak, NULL, gpScreenReal, &dstrect);
 #if SDL_VERSION_ATLEAST(2, 0, 0)
-            VIDEO_RenderCopy();
+            gRenderBackend.RenderCopy();
 #else
             SDL_UpdateRect(gpScreenReal, 0, 0, gpScreenReal->w, gpScreenReal->h);
 #endif
@@ -1339,7 +1378,7 @@ VIDEO_DrawSurfaceToScreen(
       return;
    }
    SDL_BlitScaled(pSurface, NULL, gpScreenReal, NULL);
-   VIDEO_RenderCopy();
+   gRenderBackend.RenderCopy();
 #else
    SDL_Surface   *pCompatSurface;
    SDL_Rect       rect;

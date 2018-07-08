@@ -1,7 +1,7 @@
 /* -*- mode: c; tab-width: 4; c-basic-offset: 4; c-file-style: "linux" -*- */
 //
 // Copyright (c) 2009-2011, Wei Mingzhi <whistler_wmz@users.sf.net>.
-// Copyright (c) 2011-2017, SDLPAL development team.
+// Copyright (c) 2011-2018, SDLPAL development team.
 // All rights reserved.
 //
 // This file is part of SDLPAL.
@@ -30,8 +30,8 @@
 #define PAL_CONFIG_PREFIX     UTIL_ConfigPath()
 #define PAL_HAS_TOUCH         1
 #define PAL_AUDIO_DEFAULT_BUFFER_SIZE   4096
-#define PAL_DEFAULT_WINDOW_WIDTH   320
-#define PAL_DEFAULT_WINDOW_HEIGHT  200
+#define PAL_DEFAULT_WINDOW_WIDTH   640
+#define PAL_DEFAULT_WINDOW_HEIGHT  400
 
 #if SDL_VERSION_ATLEAST(2,0,0)
 # define PAL_VIDEO_INIT_FLAGS  (SDL_WINDOW_SHOWN)
@@ -58,9 +58,14 @@
 #define PAL_IS_PATH_SEPARATOR(x) ((x) == '\\' || (x) == '/')
 
 #define strtok_r strtok_s
+#define strcasecmp _stricmp
 #define strncasecmp _strnicmp
 
 #define strcasestr(a,b) strstr(_strupr((a)),_strupr((b)))
+
+#if WINAPI_FAMILY != WINAPI_FAMILY_PHONE_APP
+#define PAL_HAS_GLSL 1
+#endif
 
 PAL_C_LINKAGE_BEGIN
 

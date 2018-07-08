@@ -1,7 +1,7 @@
 /* -*- mode: c; tab-width: 4; c-basic-offset: 4; c-file-style: "linux" -*- */
 //
 // Copyright (c) 2009-2011, Wei Mingzhi <whistler_wmz@users.sf.net>.
-// Copyright (c) 2011-2017, SDLPAL development team.
+// Copyright (c) 2011-2018, SDLPAL development team.
 // All rights reserved.
 //
 // This file is part of SDLPAL.
@@ -69,7 +69,7 @@ PAL_BattleSelectAutoTarget(
 {
    int          i;
 
-   i = (int)g_Battle.UI.wPrevEnemyTarget;
+   i = g_Battle.UI.iPrevEnemyTarget;
 
    if (i >= 0 && i <= g_Battle.wMaxEnemyIndex &&
       g_Battle.rgEnemy[i].wObjectID != 0 &&
@@ -1467,6 +1467,7 @@ PAL_BattleStartFrame(
                   //
                   g_Battle.ActionQueue[j].wDexterity = 0;
                   g_Battle.rgPlayer[i].action.ActionType = kBattleActionAttack;
+                  g_Battle.rgPlayer[i].action.wActionID = 0;
                   g_Battle.rgPlayer[i].state = kFighterAct;
                }
                else
@@ -1476,6 +1477,7 @@ PAL_BattleStartFrame(
                   if (gpGlobals->rgPlayerStatus[wPlayerRole][kStatusConfused] > 0)
                   {
                      g_Battle.rgPlayer[i].action.ActionType = kBattleActionAttack;
+                     g_Battle.rgPlayer[i].action.wActionID = 0; //avoid be deduced to autoattack
                      g_Battle.rgPlayer[i].state = kFighterAct;
                   }
 
@@ -1699,7 +1701,7 @@ PAL_BattleStartFrame(
             else if (g_Battle.fPrevPlayerAutoAtk)
             {
                g_Battle.UI.wCurPlayerIndex = i;
-               g_Battle.UI.wSelectedIndex = g_Battle.rgPlayer[i].action.sTarget;
+               g_Battle.UI.iSelectedIndex = g_Battle.rgPlayer[i].action.sTarget;
                g_Battle.UI.wActionType = kBattleActionAttack;
                PAL_BattleCommitAction(FALSE);
             }
@@ -1776,10 +1778,12 @@ PAL_BattleCommitAction(
 
    if (!fRepeat)
    {
+      //clear action cache first; avoid cache pollution
+      memset(&g_Battle.rgPlayer[g_Battle.UI.wCurPlayerIndex].action,0,sizeof(g_Battle.rgPlayer[g_Battle.UI.wCurPlayerIndex].action));
       g_Battle.rgPlayer[g_Battle.UI.wCurPlayerIndex].action.ActionType =
          g_Battle.UI.wActionType;
       g_Battle.rgPlayer[g_Battle.UI.wCurPlayerIndex].action.sTarget =
-         (SHORT)g_Battle.UI.wSelectedIndex;
+         (SHORT)g_Battle.UI.iSelectedIndex;
 
       if (g_Battle.UI.wActionType == kBattleActionAttack)
       {
@@ -1804,6 +1808,7 @@ PAL_BattleCommitAction(
       if (g_Battle.rgPlayer[g_Battle.UI.wCurPlayerIndex].action.ActionType == kBattleActionPass)
       {
          g_Battle.rgPlayer[g_Battle.UI.wCurPlayerIndex].action.ActionType = kBattleActionAttack;
+         g_Battle.rgPlayer[g_Battle.UI.wCurPlayerIndex].action.wActionID = 0;
          g_Battle.rgPlayer[g_Battle.UI.wCurPlayerIndex].action.sTarget = -1;
       }
    }
@@ -3184,6 +3189,7 @@ PAL_BattlePlayerValidateAction(
          if (!fValid)
          {
             g_Battle.rgPlayer[wPlayerIndex].action.ActionType = kBattleActionAttack;
+            g_Battle.rgPlayer[wPlayerIndex].action.wActionID = 0;
          }
          else if (gpGlobals->g.rgObject[wObjectID].magic.wFlags & kMagicFlagApplyToAll)
          {
@@ -3236,6 +3242,7 @@ PAL_BattlePlayerValidateAction(
 #endif
          {
             g_Battle.rgPlayer[wPlayerIndex].action.ActionType = kBattleActionAttack;
+            g_Battle.rgPlayer[wPlayerIndex].action.wActionID = 0;
             break;
          }
       }
@@ -3262,6 +3269,7 @@ PAL_BattlePlayerValidateAction(
       if (PAL_GetItemAmount(wObjectID) == 0)
       {
          g_Battle.rgPlayer[wPlayerIndex].action.ActionType = kBattleActionAttack;
+         g_Battle.rgPlayer[wPlayerIndex].action.wActionID = 0;
       }
       else if (gpGlobals->g.rgObject[wObjectID].item.wFlags & kItemFlagApplyToAll)
       {
@@ -3296,6 +3304,7 @@ PAL_BattlePlayerValidateAction(
          //
          fToEnemy = TRUE;
          g_Battle.rgPlayer[wPlayerIndex].action.ActionType = kBattleActionAttack;
+         g_Battle.rgPlayer[wPlayerIndex].action.wActionID = 0; //avoid be deduced to autoattack
       }
       else
       {
@@ -3315,6 +3324,7 @@ PAL_BattlePlayerValidateAction(
             //
             fToEnemy = TRUE;
             g_Battle.rgPlayer[wPlayerIndex].action.ActionType = kBattleActionAttack;
+            g_Battle.rgPlayer[wPlayerIndex].action.wActionID = 0;
          }
       }
       break;
@@ -4909,7 +4919,7 @@ PAL_BattleStealFromEnemy(
 
          if (c > 0)
          {
-			 PAL_swprintf(s, sizeof(s) / sizeof(WCHAR), L"%ls %d %ls", PAL_GetWord(34), c, PAL_GetWord(10));
+			 PAL_swprintf(s, sizeof(s) / sizeof(WCHAR), L"@%ls @%d @%ls@", PAL_GetWord(34), c, PAL_GetWord(10));
          }
       }
       else
@@ -4920,7 +4930,7 @@ PAL_BattleStealFromEnemy(
          g_Battle.rgEnemy[wTarget].e.nStealItem--;
          PAL_AddItemToInventory(g_Battle.rgEnemy[wTarget].e.wStealItem, 1);
 
-         PAL_swprintf(s, sizeof(s) / sizeof(WCHAR), L"%ls%ls", PAL_GetWord(34), PAL_GetWord(g_Battle.rgEnemy[wTarget].e.wStealItem));
+         PAL_swprintf(s, sizeof(s) / sizeof(WCHAR), L"%ls@%ls@", PAL_GetWord(34), PAL_GetWord(g_Battle.rgEnemy[wTarget].e.wStealItem));
 	  }
 
       if (s[0] != '\0')

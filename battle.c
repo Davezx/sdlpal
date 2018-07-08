@@ -1,7 +1,7 @@
 /* -*- mode: c; tab-width: 4; c-basic-offset: 4; c-file-style: "linux" -*- */
 //
 // Copyright (c) 2009-2011, Wei Mingzhi <whistler_wmz@users.sf.net>.
-// Copyright (c) 2011-2017, SDLPAL development team.
+// Copyright (c) 2011-2018, SDLPAL development team.
 // All rights reserved.
 //
 // This file is part of SDLPAL.
@@ -1350,8 +1350,8 @@ PAL_StartBattle(
    g_Battle.UI.dwMsgShowTime = 0;
    g_Battle.UI.state = kBattleUIWait;
    g_Battle.UI.fAutoAttack = FALSE;
-   g_Battle.UI.wSelectedIndex = 0;
-   g_Battle.UI.wPrevEnemyTarget = 0;
+   g_Battle.UI.iSelectedIndex = 0;
+   g_Battle.UI.iPrevEnemyTarget = -1;
 
    memset(g_Battle.UI.rgShowNum, 0, sizeof(g_Battle.UI.rgShowNum));
 

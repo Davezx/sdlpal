@@ -1,7 +1,7 @@
 /* -*- mode: c; tab-width: 4; c-basic-offset: 4; c-file-style: "linux" -*- */
 //
 // Copyright (c) 2009-2011, Wei Mingzhi <whistler_wmz@users.sf.net>.
-// Copyright (c) 2011-2017, SDLPAL development team.
+// Copyright (c) 2011-2018, SDLPAL development team.
 // All rights reserved.
 //
 // This file is part of SDLPAL.
@@ -40,6 +40,7 @@
 #include <stdarg.h>
 #include <assert.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "SDL.h"
 #include "SDL_endian.h"
@@ -183,6 +184,14 @@ typedef const WCHAR        *LPCWSTR;
 # define PAL_DEFAULT_FULLSCREEN_HEIGHT PAL_DEFAULT_WINDOW_HEIGHT
 #endif
 
+#ifndef PAL_DEFAULT_TEXTURE_WIDTH
+# define PAL_DEFAULT_TEXTURE_WIDTH     PAL_DEFAULT_WINDOW_WIDTH
+#endif
+
+#ifndef PAL_DEFAULT_TEXTURE_HEIGHT
+# define PAL_DEFAULT_TEXTURE_HEIGHT    PAL_DEFAULT_WINDOW_HEIGHT
+#endif
+
 /* Default for 1024 samples */
 #ifndef PAL_AUDIO_DEFAULT_BUFFER_SIZE
 # define PAL_AUDIO_DEFAULT_BUFFER_SIZE   1024
@@ -263,5 +272,7 @@ typedef enum tagLOGLEVEL
 #ifndef PAL_IS_PATH_SEPARATOR
 # define PAL_IS_PATH_SEPARATOR(x) ((x) == '/')
 #endif
+
+#include "adplug/opltypes.h"
 
 #endif
